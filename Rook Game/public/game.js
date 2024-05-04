@@ -19,8 +19,8 @@ const config = {
     create: create,
     update: update,
   },
-  // antialias: false,
 };
+
 const game = new Phaser.Game(config);
 var bg;
 var player;
@@ -28,7 +28,8 @@ var playerTweens = null;
 var selectBox;
 var selectBoxXidx = 0;
 var selectBoxYidx = 0;
-var selectTweens = null;
+var selectScaleTweens = null;
+var selectPositionTweens = null;
 var limitX = 0;
 var limitY = 0;
 var startX = 41.31;
@@ -74,6 +75,8 @@ function create() {
 
   graphics.destroy();
   selectBox = this.add.image(player.x, player.y + boxSize, "selectbox");
+  var t = this;
+  addMarker(t);
 }
 function update() {
   cursors = this.input.keyboard.createCursorKeys();
@@ -82,74 +85,61 @@ function update() {
   limitY = (player.y - startY) / boxSize + 1;
   if (cursors != null) {
     if (cursors.down.isDown) {
-      if (selectBoxYidx != 7 && valueAdded == false) {
+      if (selectBoxYidx < 7 && valueAdded == false) {
         selectBoxYidx++;
         valueAdded = true;
       }
-      selectBox.visible = true;
-      selectBox.x = player.x;
-      selectBox.y = startY + boxSize * selectBoxYidx;
-
+      changeSelectionPosition(player.x, startY + boxSize * selectBoxYidx, t);
       destroyBoxObject();
     } else if (cursors.up.isDown) {
-      if (selectBoxYidx != limitY && valueAdded == false) {
+      if (selectBoxYidx > limitY && valueAdded == false) {
         selectBoxYidx--;
         valueAdded = true;
       }
-      selectBox.visible = true;
-      selectBox.x = player.x;
-      selectBox.y = startY + boxSize * selectBoxYidx;
-
+      changeSelectionPosition(player.x, startY + boxSize * selectBoxYidx, t);
       destroyBoxObject();
     } else if (cursors.right.isDown) {
-      if (selectBoxXidx != limitX && valueAdded == false) {
+      if (selectBoxXidx < limitX && valueAdded == false) {
         selectBoxXidx++;
         valueAdded = true;
       }
-      selectBox.visible = true;
-      selectBox.x = startX + boxSize * selectBoxXidx;
-      selectBox.y = player.y;
-
+      changeSelectionPosition(startX + boxSize * selectBoxXidx, player.y, t);
       destroyBoxObject();
     } else if (cursors.left.isDown) {
-      if (selectBoxXidx != 0 && valueAdded == false) {
+      if (selectBoxXidx > 0 && valueAdded == false) {
         selectBoxXidx--;
         valueAdded = true;
       }
-      selectBox.visible = true;
-      selectBox.x = startX + boxSize * selectBoxXidx;
-      selectBox.y = player.y;
-
+      changeSelectionPosition(startX + boxSize * selectBoxXidx, player.y, t);
       destroyBoxObject();
     } else if (cursors.space.isDown) {
-      console.log(selectBoxXidx, selectBoxYidx);
-      if (selectTweens == null) {
-        selectTweens = this.tweens.add({
+      if (selectScaleTweens == null) {
+        selectScaleTweens = this.tweens.add({
           targets: selectBox,
           scale: 1.3,
           duration: 100,
           ease: "Power1",
           onComplete: () => {
-            selectTweens = this.tweens.add({
+            selectScaleTweens = this.tweens.add({
               targets: selectBox,
               scale: 1,
               duration: 100,
               ease: "Linear",
               onComplete: () => {
                 selectBox.scale = 1;
-                selectTweens.destroy();
-                selectTweens = null;
+                selectScaleTweens.destroy();
+                selectScaleTweens = null;
                 playerTweens = this.tweens.add({
                   targets: player,
                   props: {
                     x: {
                       value: selectBox.x,
-                      duration: 1000,
+                      duration: 500,
                       ease: "Power1",
                     },
                     y: {
                       value: selectBox.y,
-                      duration: 1000,
+                      duration: 500,
                       ease: "Power1",
                     },
                   },
@@ -159,8 +149,29 @@ function update() {
                   },
                   onComplete: () => {
                     addMarker(t);
+                    selectBox.visible = true;
                     playerTweens.destroy();
                     playerTweens = null;
+
+                    if (selectBoxYidx + 1 < 7) {
+                      selectBoxYidx = selectBoxYidx + 1;
+                      changeSelectionPosition(
+                        player.x,
+                        startY + boxSize * selectBoxYidx,
+                        t,
+                      );
+                    } else if (selectBoxXidx - 1 > -1) {
+                      if ((player.x - startX) / boxSize == selectBoxXidx) {
+                        selectBoxXidx = selectBoxXidx - 1;
+                      }
+                      changeSelectionPosition(
+                        startX + boxSize * selectBoxXidx,
+                        player.y,
+                        t,
+                      );
+                    } else {
+                      changeSelectionPosition(player.x, player.y, t);
+                    }
                   },
                 });
               },
@@ -168,20 +179,32 @@ function update() {
           },
         });
       }
-      // destroyBoxObject();
     } else {
       valueAdded = false;
-      // addMarker(t);
       // selectBox.visible = false;
     }
   }
 }
+function changeSelectionPosition(posX, posY, t) {
+  if (selectPositionTweens == null) {
+    selectPositionTweens = t.tweens.add({
+      targets: selectBox,
+      props: {
+        x: { value: posX, duration: 100, ease: "Power1" },
+        y: { value: posY, duration: 100, ease: "Power1" },
+      },
+      onComplete: () => {
+        addMarker(t);
+        selectPositionTweens.destroy();
+        selectPositionTweens = null;
+      },
+    });
+  }
+}
 function addMarker(t) {
-  if (
-    boxDownList.length != 8 - (player.y - startY) / boxSize + 1 &&
-    boxSideList.length != 8 - (8 - (player.x - startX) / boxSize)
-  ) {
-    var count = (player.y - startY) / boxSize;
+  var count = 0;
+  if (boxDownList.length != 8 - (player.y - startY) / boxSize) {
+    count = (player.y - startY) / boxSize;
     // console.log(count);
     for (let i = count; i < 7; i++) {
       if (player.y == startY + boxSize * count) {
@@ -192,6 +215,8 @@ function addMarker(t) {
       boxDownList.push(box);
       count++;
     }
+  }
+  if (boxSideList.length != 8 - (8 - (player.x - startX) / boxSize)) {
     count = (player.x - startX) / boxSize;
     // console.log(count);
     for (let i = count; i > 0; i--) {
@@ -202,6 +227,8 @@ function addMarker(t) {
       boxSideList.push(box);
       count--;
     }
+  }
+  if (boxDownList.length != 0 || boxSideList.length != 0) {
     var tweens = t.tweens.add({
       targets: [...boxDownList, ...boxSideList],
       scale: 0.5,
