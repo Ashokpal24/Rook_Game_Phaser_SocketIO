@@ -1,9 +1,9 @@
 import Phaser from "phaser";
-import io from "socket.io-client";
-const socket = io("https://pq9sks-3000.csb.app");
-socket.on("connected", (data) => {
-  console.log("handshake completed! " + data.handshakeNum);
-});
+// import io from "socket.io-client";
+// const socket = io("https://pq9sks-3000.csb.app");
+// socket.on("connected", (data) => {
+//   console.log("handshake completed! " + data.handshakeNum);
+// });
 const config = {
   type: Phaser.CANVAS,
   width: 375,
@@ -53,7 +53,9 @@ var move = 0;
 var canMove = false;
 var intervalId = null;
 var timeoutId = null;
-
+var angleIntervalId = null;
+var maxAngle = 1;
+var arcGraphics = null;
 function preload() {
   this.load.svg("background", "./assets/board.svg", { scale: 2 });
 }
@@ -112,6 +114,41 @@ function create() {
     fontSize: "24px",
     fill: "#ffffff",
   });
+
+  this.startAngle = 0;
+  this.endAngle = 0;
+  this.fillColor = 0x32a83c;
+  var graphics = this.add.graphics();
+  this.drawArc = () => {
+    graphics.clear();
+    graphics.lineStyle(10, this.fillColor, 1);
+    graphics.beginPath();
+    this.endAngle += Phaser.Math.DegToRad(36);
+    if (this.endAngle >= Math.PI * 2) {
+      this.endAngle = 0;
+      this.timerEvent.remove();
+      this.timerEvent = null;
+      if (currentActivePlayer === 1) {
+        currentActivePlayer = 2;
+        canMove = true; //for bot
+      } else {
+        currentActivePlayer = 1;
+      }
+      playerChanceDebug.setText(`player chance:${currentActivePlayer}`);
+      console.log(currentActivePlayer);
+    }
+    graphics.arc(
+      config.width - 40,
+      40,
+      20,
+      this.startAngle,
+      this.endAngle,
+      false,
+      0.2,
+    );
+    graphics.strokePath();
+  };
+  this.timerEvent = null;
 }
 function update() {
   cursors = this.input.keyboard.createCursorKeys();
@@ -121,10 +158,18 @@ function update() {
 
   if (restart == true && this.ENTER.isDown) {
     restart = false;
+    currentActivePlayer = 1;
     this.scene.restart();
   }
   if (currentActivePlayer == 1 && restart == false) {
     if (cursors != null) {
+      if (this.timerEvent == null) {
+        this.timerEvent = this.time.addEvent({
+          delay: 1000,
+          callback: this.drawArc,
+          loop: true,
+        });
+      }
       if (cursors.down.isDown) {
         if (selectBoxYidx < 7 && valueAdded == false) {
           selectBoxYidx++;
@@ -154,6 +199,9 @@ function update() {
         changeSelectionPosition(startX + boxSize * selectBoxXidx, player.y, t);
         destroyBoxObject();
       } else if (cursors.space.isDown) {
+        this.timerEvent.remove();
+        this.timerEvent = null;
+        this.endAngle = 0;
         changePlayerPosition(t);
         canMove = true;
       } else {
@@ -161,6 +209,14 @@ function update() {
       }
     }
   } else if (currentActivePlayer == 2 && canMove == true && restart == false) {
+    if (this.timerEvent == null) {
+      this.timerEvent = this.time.addEvent({
+        delay: 1000,
+        callback: this.drawArc,
+        loop: true,
+      });
+    }
+    //bot section
     move = Math.random() < 0.5 ? 0 : 1;
     if (intervalId == null) {
       intervalId = setInterval(() => {
@@ -192,6 +248,9 @@ function update() {
         timeoutId = null;
         changePlayerPosition(t);
         canMove = false;
+        this.endAngle = 0;
+        this.timerEvent.remove();
+        this.timerEvent = null;
       }, 5000);
     }
   }
@@ -309,10 +368,12 @@ function changePlayerPosition(t) {
                   );
                   console.log("meh");
                 }
-                if (currentActivePlayer === 1) {
-                  currentActivePlayer = 2;
-                } else {
-                  currentActivePlayer = 1;
+                if (restart == false) {
+                  if (currentActivePlayer === 1) {
+                    currentActivePlayer = 2;
+                  } else {
+                    currentActivePlayer = 1;
+                  }
                 }
                 playerChanceDebug.setText(
                   `player chance:${currentActivePlayer}`,
