@@ -28,6 +28,8 @@ var playerTweens = null;
 var selectBox;
 var selectBoxXidx = 0;
 var selectBoxYidx = 0;
+var xIdxTextDebug = null;
+var yIdxTextDebug = null;
 var selectScaleTweens = null;
 var selectPositionTweens = null;
 var limitX = 0;
@@ -77,6 +79,15 @@ function create() {
   selectBox = this.add.image(player.x, player.y + boxSize, "selectbox");
   var t = this;
   addMarker(t);
+
+  xIdxTextDebug = this.add.text(config.width / 2 - 100, 20, "x:0", {
+    fontSize: "48px",
+    fill: "#ffffff",
+  });
+  yIdxTextDebug = this.add.text(config.width / 2 + 20, 20, "y:0", {
+    fontSize: "48px",
+    fill: "#ffffff",
+  });
 }
 function update() {
   cursors = this.input.keyboard.createCursorKeys();
@@ -153,24 +164,32 @@ function update() {
                     playerTweens.destroy();
                     playerTweens = null;
 
-                    if (selectBoxYidx + 1 < 7) {
+                    if (
+                      selectBoxYidx + 1 < 8 &&
+                      (player.y - startY) / boxSize != selectBoxYidx + 1
+                    ) {
                       selectBoxYidx = selectBoxYidx + 1;
                       changeSelectionPosition(
                         player.x,
                         startY + boxSize * selectBoxYidx,
                         t,
                       );
-                    } else if (selectBoxXidx - 1 > -1) {
-                      if ((player.x - startX) / boxSize == selectBoxXidx) {
-                        selectBoxXidx = selectBoxXidx - 1;
-                      }
+                    } else if (
+                      selectBoxXidx - 1 > -1 &&
+                      (player.x - startX) / boxSize != selectBoxXidx - 1
+                    ) {
+                      selectBoxXidx = selectBoxXidx - 1;
                       changeSelectionPosition(
                         startX + boxSize * selectBoxXidx,
                         player.y,
                         t,
                       );
                     } else {
-                      changeSelectionPosition(player.x, player.y, t);
+                      changeSelectionPosition(
+                        startX + boxSize * selectBoxXidx,
+                        startY + boxSize * selectBoxYidx,
+                        t,
+                      );
                     }
                   },
                 });
@@ -187,6 +206,9 @@ function update() {
 }
 function changeSelectionPosition(posX, posY, t) {
   if (selectPositionTweens == null) {
+    xIdxTextDebug.setText(`x:${selectBoxXidx}`);
+    yIdxTextDebug.setText(`y:${selectBoxYidx}`);
+
     selectPositionTweens = t.tweens.add({
       targets: selectBox,
       props: {
