@@ -167,6 +167,7 @@ function update() {
             player.y,
             t,
           );
+          // console.log(selectBoxXidx, selectBoxYidx);
           destroyBoxObject();
         } else {
           changeSelectionPosition(
@@ -174,6 +175,7 @@ function update() {
             startY + boxSize * selectBoxYidx,
             t,
           );
+          // console.log(selectBoxXidx, selectBoxYidx);
           destroyBoxObject();
         }
       }, 1000);
@@ -193,19 +195,27 @@ function update() {
 
 function botMove(t) {
   const calX = () => {
-    if ((player.x - startX) / boxSize != 0)
+    // console.log((player.x - startX) / boxSize == 0);
+    if ((player.x - startX) / boxSize != 0) {
+      console.log("random x generator");
       return limitX > 0 ? Math.floor(Math.random() * (0 - limitX) + limitX) : 0;
-    else {
+    } else {
+      console.log("random y generator");
       move = 1;
-      return calY();
+      selectBoxYidx = calY();
+      return selectBoxXidx;
     }
   };
   const calY = () => {
-    if ((player.y - startY) / boxSize != 7)
+    // console.log((player.y - startY) / boxSize == 7);
+    if ((player.y - startY) / boxSize != 7) {
+      console.log("random y generator");
       return limitY < 7 ? Math.floor(Math.random() * (limitY - 7) + 7) : 7;
-    else {
+    } else {
+      console.log("random x generator");
       move = 0;
-      return calX();
+      selectBoxXidx = calX();
+      return selectBoxYidx;
     }
   };
   if (move == 0) {
@@ -265,10 +275,9 @@ function changePlayerPosition(t) {
                   );
                   restart = true;
                 }
-
                 if (
                   selectBoxYidx + 1 < 8 &&
-                  (player.y - startY) / boxSize != selectBoxYidx + 1
+                  (player.y - startY) / boxSize != 7
                 ) {
                   selectBoxYidx = selectBoxYidx + 1;
                   changeSelectionPosition(
@@ -279,7 +288,7 @@ function changePlayerPosition(t) {
                   console.log("move y");
                 } else if (
                   selectBoxXidx - 1 > -1 &&
-                  (player.x - startX) / boxSize != selectBoxXidx - 1
+                  (player.x - startX) / boxSize != 0
                 ) {
                   selectBoxXidx = selectBoxXidx - 1;
                   changeSelectionPosition(
