@@ -1,5 +1,9 @@
 import Phaser from "phaser";
-
+import io from "socket.io-client";
+const socket = io("https://pq9sks-3000.csb.app");
+socket.on("connected", (data) => {
+  console.log("handshake completed! " + data.handshakeNum);
+});
 const config = {
   type: Phaser.CANVAS,
   width: 375,
