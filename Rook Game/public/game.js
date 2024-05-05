@@ -30,6 +30,9 @@ var selectBoxXidx = 0;
 var selectBoxYidx = 0;
 var xIdxTextDebug = null;
 var yIdxTextDebug = null;
+var playerChanceDebug = null;
+var winTextDebug = null;
+var currentActivePlayer = 1;
 var selectScaleTweens = null;
 var selectPositionTweens = null;
 var limitX = 0;
@@ -41,10 +44,17 @@ var boxSize = 41.31;
 var boxDownList = [];
 var boxSideList = [];
 var valueAdded = false;
+var restart = false;
+var move = 0;
+var canMove = false;
+var intervalId = null;
+var timeoutId = null;
+
 function preload() {
   this.load.svg("background", "./assets/board.svg", { scale: 2 });
 }
 function create() {
+  this.ENTER = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
   bg = this.add.image(config.width / 2, config.height / 2, "background");
   bg.setScale(0.5);
 
@@ -78,14 +88,24 @@ function create() {
   graphics.destroy();
   selectBox = this.add.image(player.x, player.y + boxSize, "selectbox");
   var t = this;
+  destroyBoxObject();
   addMarker(t);
 
-  xIdxTextDebug = this.add.text(config.width / 2 - 100, 20, "x:0", {
-    fontSize: "48px",
+  xIdxTextDebug = this.add.text(0, 10, "x:0", {
+    fontSize: "24px",
     fill: "#ffffff",
   });
-  yIdxTextDebug = this.add.text(config.width / 2 + 20, 20, "y:0", {
-    fontSize: "48px",
+  yIdxTextDebug = this.add.text(100, 10, "y:0", {
+    fontSize: "24px",
+    fill: "#ffffff",
+  });
+
+  playerChanceDebug = this.add.text(0, 50, "player chance:1", {
+    fontSize: "24px",
+    fill: "#ffffff",
+  });
+  winTextDebug = this.add.text(0, config.height / 2, "", {
+    fontSize: "24px",
     fill: "#ffffff",
   });
 }
@@ -94,114 +114,202 @@ function update() {
   var t = this;
   limitX = (player.x - startX) / boxSize - 1;
   limitY = (player.y - startY) / boxSize + 1;
-  if (cursors != null) {
-    if (cursors.down.isDown) {
-      if (selectBoxYidx < 7 && valueAdded == false) {
-        selectBoxYidx++;
-        valueAdded = true;
-      }
-      changeSelectionPosition(player.x, startY + boxSize * selectBoxYidx, t);
-      destroyBoxObject();
-    } else if (cursors.up.isDown) {
-      if (selectBoxYidx > limitY && valueAdded == false) {
-        selectBoxYidx--;
-        valueAdded = true;
-      }
-      changeSelectionPosition(player.x, startY + boxSize * selectBoxYidx, t);
-      destroyBoxObject();
-    } else if (cursors.right.isDown) {
-      if (selectBoxXidx < limitX && valueAdded == false) {
-        selectBoxXidx++;
-        valueAdded = true;
-      }
-      changeSelectionPosition(startX + boxSize * selectBoxXidx, player.y, t);
-      destroyBoxObject();
-    } else if (cursors.left.isDown) {
-      if (selectBoxXidx > 0 && valueAdded == false) {
-        selectBoxXidx--;
-        valueAdded = true;
-      }
-      changeSelectionPosition(startX + boxSize * selectBoxXidx, player.y, t);
-      destroyBoxObject();
-    } else if (cursors.space.isDown) {
-      if (selectScaleTweens == null) {
-        selectScaleTweens = this.tweens.add({
-          targets: selectBox,
-          scale: 1.3,
-          duration: 100,
-          ease: "Power1",
-          onComplete: () => {
-            selectScaleTweens = this.tweens.add({
-              targets: selectBox,
-              scale: 1,
-              duration: 100,
-              ease: "Linear",
-              onComplete: () => {
-                selectBox.scale = 1;
-                selectScaleTweens.destroy();
-                selectScaleTweens = null;
-                playerTweens = this.tweens.add({
-                  targets: player,
-                  props: {
-                    x: {
-                      value: selectBox.x,
-                      duration: 500,
-                      ease: "Power1",
-                    },
-                    y: {
-                      value: selectBox.y,
-                      duration: 500,
-                      ease: "Power1",
-                    },
-                  },
-                  onStart: () => {
-                    selectBox.visible = false;
-                    destroyBoxObject();
-                  },
-                  onComplete: () => {
-                    addMarker(t);
-                    selectBox.visible = true;
-                    playerTweens.destroy();
-                    playerTweens = null;
 
-                    if (
-                      selectBoxYidx + 1 < 8 &&
-                      (player.y - startY) / boxSize != selectBoxYidx + 1
-                    ) {
-                      selectBoxYidx = selectBoxYidx + 1;
-                      changeSelectionPosition(
-                        player.x,
-                        startY + boxSize * selectBoxYidx,
-                        t,
-                      );
-                    } else if (
-                      selectBoxXidx - 1 > -1 &&
-                      (player.x - startX) / boxSize != selectBoxXidx - 1
-                    ) {
-                      selectBoxXidx = selectBoxXidx - 1;
-                      changeSelectionPosition(
-                        startX + boxSize * selectBoxXidx,
-                        player.y,
-                        t,
-                      );
-                    } else {
-                      changeSelectionPosition(
-                        startX + boxSize * selectBoxXidx,
-                        startY + boxSize * selectBoxYidx,
-                        t,
-                      );
-                    }
-                  },
-                });
+  if (restart == true && this.ENTER.isDown) {
+    restart = false;
+    this.scene.restart();
+  }
+  if (currentActivePlayer == 1 && restart == false) {
+    if (cursors != null) {
+      if (cursors.down.isDown) {
+        if (selectBoxYidx < 7 && valueAdded == false) {
+          selectBoxYidx++;
+          valueAdded = true;
+        }
+        changeSelectionPosition(player.x, startY + boxSize * selectBoxYidx, t);
+        destroyBoxObject();
+      } else if (cursors.up.isDown) {
+        if (selectBoxYidx > limitY && valueAdded == false) {
+          selectBoxYidx--;
+          valueAdded = true;
+        }
+        changeSelectionPosition(player.x, startY + boxSize * selectBoxYidx, t);
+        destroyBoxObject();
+      } else if (cursors.right.isDown) {
+        if (selectBoxXidx < limitX && valueAdded == false) {
+          selectBoxXidx++;
+          valueAdded = true;
+        }
+        changeSelectionPosition(startX + boxSize * selectBoxXidx, player.y, t);
+        destroyBoxObject();
+      } else if (cursors.left.isDown) {
+        if (selectBoxXidx > 0 && valueAdded == false) {
+          selectBoxXidx--;
+          valueAdded = true;
+        }
+        changeSelectionPosition(startX + boxSize * selectBoxXidx, player.y, t);
+        destroyBoxObject();
+      } else if (cursors.space.isDown) {
+        changePlayerPosition(t);
+        canMove = true;
+      } else {
+        valueAdded = false;
+      }
+    }
+  } else if (currentActivePlayer == 2 && canMove == true && restart == false) {
+    move = Math.random() < 0.5 ? 0 : 1;
+    if (intervalId == null) {
+      intervalId = setInterval(() => {
+        botMove(t);
+        if (move == 0) {
+          changeSelectionPosition(
+            startX + boxSize * selectBoxXidx,
+            player.y,
+            t,
+          );
+          destroyBoxObject();
+        } else {
+          changeSelectionPosition(
+            player.x,
+            startY + boxSize * selectBoxYidx,
+            t,
+          );
+          destroyBoxObject();
+        }
+      }, 1000);
+    }
+    if (timeoutId == null) {
+      timeoutId = setTimeout(() => {
+        clearInterval(intervalId);
+        clearTimeout(timeoutId);
+        intervalId = null;
+        timeoutId = null;
+        changePlayerPosition(t);
+        canMove = false;
+      }, 5000);
+    }
+  }
+}
+
+function botMove(t) {
+  const calX = () => {
+    if ((player.x - startX) / boxSize != 0)
+      return limitX > 0 ? Math.floor(Math.random() * (0 - limitX) + limitX) : 0;
+    else {
+      move = 1;
+      return calY();
+    }
+  };
+  const calY = () => {
+    if ((player.y - startY) / boxSize != 7)
+      return limitY < 7 ? Math.floor(Math.random() * (limitY - 7) + 7) : 7;
+    else {
+      move = 0;
+      return calX();
+    }
+  };
+  if (move == 0) {
+    selectBoxXidx = calX();
+  } else {
+    selectBoxYidx = calY();
+  }
+}
+
+function changePlayerPosition(t) {
+  if (selectScaleTweens == null) {
+    selectScaleTweens = t.tweens.add({
+      targets: selectBox,
+      scale: 1.3,
+      duration: 100,
+      ease: "Power1",
+      onComplete: () => {
+        selectScaleTweens = t.tweens.add({
+          targets: selectBox,
+          scale: 1,
+          duration: 100,
+          ease: "Linear",
+          onComplete: () => {
+            selectBox.scale = 1;
+            selectScaleTweens.destroy();
+            selectScaleTweens = null;
+            playerTweens = t.tweens.add({
+              targets: player,
+              props: {
+                x: {
+                  value: selectBox.x,
+                  duration: 500,
+                  ease: "Power1",
+                },
+                y: {
+                  value: selectBox.y,
+                  duration: 500,
+                  ease: "Power1",
+                },
+              },
+              onStart: () => {
+                selectBox.visible = false;
+                destroyBoxObject();
+              },
+              onComplete: () => {
+                addMarker(t);
+                selectBox.visible = true;
+                playerTweens.destroy();
+                playerTweens = null;
+                if (
+                  restart == false &&
+                  player.x == startX &&
+                  player.y == startY + boxSize * 7
+                ) {
+                  winTextDebug.setText(
+                    `Player ${currentActivePlayer} wins\nplease enter to restart`,
+                  );
+                  restart = true;
+                }
+
+                if (
+                  selectBoxYidx + 1 < 8 &&
+                  (player.y - startY) / boxSize != selectBoxYidx + 1
+                ) {
+                  selectBoxYidx = selectBoxYidx + 1;
+                  changeSelectionPosition(
+                    player.x,
+                    startY + boxSize * selectBoxYidx,
+                    t,
+                  );
+                  console.log("move y");
+                } else if (
+                  selectBoxXidx - 1 > -1 &&
+                  (player.x - startX) / boxSize != selectBoxXidx - 1
+                ) {
+                  selectBoxXidx = selectBoxXidx - 1;
+                  changeSelectionPosition(
+                    startX + boxSize * selectBoxXidx,
+                    player.y,
+                    t,
+                  );
+                  console.log("move x");
+                } else {
+                  changeSelectionPosition(
+                    startX + boxSize * selectBoxXidx,
+                    startY + boxSize * selectBoxYidx,
+                    t,
+                  );
+                  console.log("meh");
+                }
+                if (currentActivePlayer === 1) {
+                  currentActivePlayer = 2;
+                } else {
+                  currentActivePlayer = 1;
+                }
+                playerChanceDebug.setText(
+                  `player chance:${currentActivePlayer}`,
+                );
               },
             });
           },
         });
-      }
-    } else {
-      valueAdded = false;
-      // selectBox.visible = false;
-    }
+      },
+    });
   }
 }
 function changeSelectionPosition(posX, posY, t) {
@@ -240,6 +348,7 @@ function addMarker(t) {
   }
   if (boxSideList.length != 8 - (8 - (player.x - startX) / boxSize)) {
     count = (player.x - startX) / boxSize;
+
     // console.log(count);
     for (let i = count; i > 0; i--) {
       if (player.x == startX + boxSize * count) {
