@@ -1,9 +1,6 @@
 import Phaser from "phaser";
-// import io from "socket.io-client";
-// const socket = io("https://pq9sks-3000.csb.app");
-// socket.on("connected", (data) => {
-//   console.log("handshake completed! " + data.handshakeNum);
-// });
+import io from "socket.io-client";
+const socket = io("https://pq9sks-3000.csb.app");
 const config = {
   type: Phaser.CANVAS,
   width: 375,
@@ -56,11 +53,47 @@ var timeoutId = null;
 var angleIntervalId = null;
 var maxAngle = 1;
 var arcGraphics = null;
+var t = null;
+
+var multiPlayerflag = true;
+var myPlayerNum = -1;
+
+socket.on("connected", (data) => {
+  console.log("handshake completed! " + data.handshakeNum);
+  console.log("My Player Number " + data.playerNum);
+
+  myPlayerNum = data.playerNum;
+});
+socket.on("currPlayerChanged", (data) => {
+  // console.log(data.curr);
+  currentActivePlayer = data.curr;
+  if (playerChanceDebug != null) {
+    playerChanceDebug.setText(`player chance:${currentActivePlayer}`);
+  }
+});
+socket.on("changedSelect", (data) => {
+  if (myPlayerNum != currentActivePlayer) {
+    selectBoxXidx = data.selectX;
+    selectBoxYidx = data.selectY;
+    if (t != null) {
+      destroyBoxObject();
+      changeSelectionPosition(data.posX, data.posY, t);
+    }
+  }
+});
+socket.on("movePlayer", () => {
+  if (t != null) {
+    changePlayerPosition(t);
+  }
+});
 function preload() {
   this.load.svg("background", "./assets/board.svg", { scale: 2 });
 }
 function create() {
+  var t = this;
   this.ENTER = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
+  cursors = this.input.keyboard.createCursorKeys();
+
   bg = this.add.image(config.width / 2, config.height / 2, "background");
   bg.setScale(0.5);
 
@@ -93,7 +126,6 @@ function create() {
 
   graphics.destroy();
   selectBox = this.add.image(player.x, player.y + boxSize, "selectbox");
-  var t = this;
   destroyBoxObject();
   addMarker(t);
 
@@ -118,24 +150,33 @@ function create() {
   this.startAngle = 0;
   this.endAngle = 0;
   this.fillColor = 0x32a83c;
+  this.timerEvent = null;
+
+  this.resetArc = () => {
+    this.endAngle = 0;
+    if (this.timerEvent != null) this.timerEvent.remove();
+    this.timerEvent = null;
+  };
+
   var graphics = this.add.graphics();
-  this.drawArc = () => {
+  this.drawArc = (reset = false) => {
     graphics.clear();
     graphics.lineStyle(10, this.fillColor, 1);
     graphics.beginPath();
-    this.endAngle += Phaser.Math.DegToRad(36);
+    if (reset == false) this.endAngle += Phaser.Math.DegToRad(36);
     if (this.endAngle >= Math.PI * 2) {
-      this.endAngle = 0;
-      this.timerEvent.remove();
-      this.timerEvent = null;
-      if (currentActivePlayer === 1) {
-        currentActivePlayer = 2;
-        canMove = true; //for bot
+      this.resetArc();
+      if (multiPlayerflag == false) {
+        if (currentActivePlayer === 1) {
+          currentActivePlayer = 2;
+          canMove = true; //for bot
+        } else {
+          currentActivePlayer = 1;
+        }
+        playerChanceDebug.setText(`player chance:${currentActivePlayer}`);
       } else {
-        currentActivePlayer = 1;
+        socket.emit("nextPlayer");
       }
-      playerChanceDebug.setText(`player chance:${currentActivePlayer}`);
-      console.log(currentActivePlayer);
     }
     graphics.arc(
       config.width - 40,
@@ -148,11 +189,10 @@ function create() {
     );
     graphics.strokePath();
   };
-  this.timerEvent = null;
 }
+
 function update() {
-  cursors = this.input.keyboard.createCursorKeys();
-  var t = this;
+  if (t == null) t = this;
   limitX = (player.x - startX) / boxSize - 1;
   limitY = (player.y - startY) / boxSize + 1;
 
@@ -161,102 +201,110 @@ function update() {
     currentActivePlayer = 1;
     this.scene.restart();
   }
-  if (currentActivePlayer == 1 && restart == false) {
-    if (cursors != null) {
-      if (this.timerEvent == null) {
-        this.timerEvent = this.time.addEvent({
-          delay: 1000,
-          callback: this.drawArc,
-          loop: true,
-        });
+  if (multiPlayerflag == true && restart == false && myPlayerNum != -1) {
+    if (myPlayerNum === currentActivePlayer) {
+      playerController(t);
+      addArc(t);
+      console.log(`Player ${myPlayerNum} active`);
+    } else {
+      this.resetArc();
+    }
+  }
+
+  if (multiPlayerflag == false && restart == false)
+    if (currentActivePlayer == 1) {
+      addArc(t);
+      playerController(t);
+    } else if (currentActivePlayer == 2 && canMove == true) {
+      addArc(t);
+      //bot section
+      move = Math.random() < 0.5 ? 0 : 1;
+      if (intervalId == null) {
+        intervalId = setInterval(() => {
+          genBotMove(t);
+          if (move == 0) {
+            changeSelectionPosition(
+              startX + boxSize * selectBoxXidx,
+              player.y,
+              t,
+            );
+            destroyBoxObject();
+          } else {
+            changeSelectionPosition(
+              player.x,
+              startY + boxSize * selectBoxYidx,
+              t,
+            );
+            destroyBoxObject();
+          }
+        }, 1000);
       }
-      if (cursors.down.isDown) {
-        if (selectBoxYidx < 7 && valueAdded == false) {
-          selectBoxYidx++;
-          valueAdded = true;
-        }
+      if (timeoutId == null) {
+        timeoutId = setTimeout(() => {
+          clearInterval(intervalId);
+          clearTimeout(timeoutId);
+          intervalId = null;
+          timeoutId = null;
+          changePlayerPosition(t);
+          canMove = false;
+          this.resetArc();
+        }, 5000);
+      }
+    }
+}
+
+function addArc(t) {
+  if (t.timerEvent == null) {
+    t.timerEvent = t.time.addEvent({
+      delay: 1000,
+      callback: t.drawArc,
+      loop: true,
+      // args: [reset],
+    });
+  }
+}
+function playerController(t) {
+  if (cursors != null) {
+    if (cursors.down.isDown) {
+      if (selectBoxYidx < 7 && valueAdded == false) {
+        selectBoxYidx++;
+        valueAdded = true;
         changeSelectionPosition(player.x, startY + boxSize * selectBoxYidx, t);
         destroyBoxObject();
-      } else if (cursors.up.isDown) {
-        if (selectBoxYidx > limitY && valueAdded == false) {
-          selectBoxYidx--;
-          valueAdded = true;
-        }
+      }
+    } else if (cursors.up.isDown) {
+      if (selectBoxYidx > limitY && valueAdded == false) {
+        selectBoxYidx--;
+        valueAdded = true;
         changeSelectionPosition(player.x, startY + boxSize * selectBoxYidx, t);
         destroyBoxObject();
-      } else if (cursors.right.isDown) {
-        if (selectBoxXidx < limitX && valueAdded == false) {
-          selectBoxXidx++;
-          valueAdded = true;
-        }
+      }
+    } else if (cursors.right.isDown) {
+      if (selectBoxXidx < limitX && valueAdded == false) {
+        selectBoxXidx++;
+        valueAdded = true;
         changeSelectionPosition(startX + boxSize * selectBoxXidx, player.y, t);
         destroyBoxObject();
-      } else if (cursors.left.isDown) {
-        if (selectBoxXidx > 0 && valueAdded == false) {
-          selectBoxXidx--;
-          valueAdded = true;
-        }
+      }
+    } else if (cursors.left.isDown) {
+      if (selectBoxXidx > 0 && valueAdded == false) {
+        selectBoxXidx--;
+        valueAdded = true;
         changeSelectionPosition(startX + boxSize * selectBoxXidx, player.y, t);
         destroyBoxObject();
-      } else if (cursors.space.isDown) {
-        this.timerEvent.remove();
-        this.timerEvent = null;
-        this.endAngle = 0;
+      }
+    } else if (cursors.space.isDown) {
+      socket.emit("movePlayer");
+      if (multiPlayerflag == false) {
         changePlayerPosition(t);
         canMove = true;
-      } else {
-        valueAdded = false;
       }
-    }
-  } else if (currentActivePlayer == 2 && canMove == true && restart == false) {
-    if (this.timerEvent == null) {
-      this.timerEvent = this.time.addEvent({
-        delay: 1000,
-        callback: this.drawArc,
-        loop: true,
-      });
-    }
-    //bot section
-    move = Math.random() < 0.5 ? 0 : 1;
-    if (intervalId == null) {
-      intervalId = setInterval(() => {
-        botMove(t);
-        if (move == 0) {
-          changeSelectionPosition(
-            startX + boxSize * selectBoxXidx,
-            player.y,
-            t,
-          );
-          // console.log(selectBoxXidx, selectBoxYidx);
-          destroyBoxObject();
-        } else {
-          changeSelectionPosition(
-            player.x,
-            startY + boxSize * selectBoxYidx,
-            t,
-          );
-          // console.log(selectBoxXidx, selectBoxYidx);
-          destroyBoxObject();
-        }
-      }, 1000);
-    }
-    if (timeoutId == null) {
-      timeoutId = setTimeout(() => {
-        clearInterval(intervalId);
-        clearTimeout(timeoutId);
-        intervalId = null;
-        timeoutId = null;
-        changePlayerPosition(t);
-        canMove = false;
-        this.endAngle = 0;
-        this.timerEvent.remove();
-        this.timerEvent = null;
-      }, 5000);
+    } else {
+      valueAdded = false;
     }
   }
 }
-
-function botMove(t) {
+function genBotMove(t) {
   const calX = () => {
     // console.log((player.x - startX) / boxSize == 0);
     if ((player.x - startX) / boxSize != 0) {
@@ -368,11 +416,19 @@ function changePlayerPosition(t) {
                   );
                   console.log("meh");
                 }
-                if (restart == false) {
-                  if (currentActivePlayer === 1) {
-                    currentActivePlayer = 2;
-                  } else {
-                    currentActivePlayer = 1;
+                if (multiPlayerflag == true) {
+                  if (myPlayerNum == currentActivePlayer) {
+                    t.resetArc();
+                    t.drawArc(true);
+                    socket.emit("nextPlayer");
+                  }
+                } else {
+                  if (restart == false) {
+                    if (currentActivePlayer === 1) {
+                      currentActivePlayer = 2;
+                    } else {
+                      currentActivePlayer = 1;
+                    }
                   }
                 }
                 playerChanceDebug.setText(
@@ -401,6 +457,14 @@ function changeSelectionPosition(posX, posY, t) {
         addMarker(t);
         selectPositionTweens.destroy();
         selectPositionTweens = null;
+        if (multiPlayerflag == true && myPlayerNum == currentActivePlayer) {
+          socket.emit("changedSelect", {
+            selectX: selectBoxXidx,
+            selectY: selectBoxYidx,
+            posX,
+            posY,
+          });
+        }
       },
     });
   }
