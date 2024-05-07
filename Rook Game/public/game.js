@@ -57,6 +57,8 @@ var t = null;
 
 var multiPlayerflag = true;
 var myPlayerNum = -1;
+var waiting = true;
+var waitingUI = null;
 
 socket.on("connected", (data) => {
   console.log("handshake completed! " + data.handshakeNum);
@@ -71,6 +73,7 @@ socket.on("currPlayerChanged", (data) => {
     playerChanceDebug.setText(`player chance:${currentActivePlayer}`);
   }
 });
+
 socket.on("changedSelect", (data) => {
   if (myPlayerNum != currentActivePlayer) {
     selectBoxXidx = data.selectX;
@@ -86,9 +89,16 @@ socket.on("movePlayer", () => {
     changePlayerPosition(t);
   }
 });
+socket.on("gameStart", () => {
+  waiting = false;
+});
+socket.on("gameStop", () => {
+  waiting = true;
+});
 function preload() {
   this.load.svg("background", "./assets/board.svg", { scale: 2 });
 }
+
 function create() {
   var t = this;
   this.ENTER = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
@@ -146,7 +156,10 @@ function create() {
     fontSize: "24px",
     fill: "#ffffff",
   });
-
+  waitingUI = this.add.text(0, config.height / 2, "waiting for Player 2...", {
+    fontSize: "24px",
+    fill: "#ffffff",
+  });
   this.startAngle = 0;
   this.endAngle = 0;
   this.fillColor = 0x32a83c;
@@ -196,12 +209,35 @@ function update() {
   limitX = (player.x - startX) / boxSize - 1;
   limitY = (player.y - startY) / boxSize + 1;
 
+  if (waiting == false) {
+    if (waitingUI != null) {
+      waitingUI.setText("");
+    }
+  } else {
+    if (waitingUI == null)
+      waitingUI = this.add.text(
+        0,
+        config.height / 2,
+        "waiting for Player 2...",
+        {
+          fontSize: "24px",
+          fill: "#ffffff",
+        },
+      );
+  }
+
   if (restart == true && this.ENTER.isDown) {
     restart = false;
     currentActivePlayer = 1;
     this.scene.restart();
   }
-  if (multiPlayerflag == true && restart == false && myPlayerNum != -1) {
+
+  if (
+    multiPlayerflag == true &&
+    restart == false &&
+    myPlayerNum != -1 &&
+    waiting == false
+  ) {
     if (myPlayerNum === currentActivePlayer) {
       playerController(t);
       addArc(t);

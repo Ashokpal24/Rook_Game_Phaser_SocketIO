@@ -19,6 +19,9 @@ io.on("connection", (socket) => {
   playerCount++;
   console.log("connected player count: ", playerCount);
 
+  if (playerCount == 2) {
+    io.emit("gameStart");
+  }
   if (playerCount < 3) {
     socket.emit("connected", {
       handshakeNum: Math.floor(Math.random() * 100),
@@ -54,6 +57,7 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     console.log(`user disconnected ID: ${socket.id}`);
     playerCount--;
+    io.emit("gameStop");
     console.log("connected player count: ", playerCount);
   });
 });
